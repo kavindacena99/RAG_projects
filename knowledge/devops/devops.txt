@@ -1,0 +1,134 @@
+DevOps is a culture, practice, and set of tools that combines software development (Dev) and IT operations (Ops) to deliver software faster and more reliably.
+
+The main goal of DevOps is to improve collaboration between development and operations teams and automate the software delivery process.
+
+Traditional approach:
+
+Developers write code
+Operations teams deploy and manage it
+Work is separated
+Releases are slower
+
+DevOps approach:
+
+Development and operations work together
+Automation is used heavily
+Software is built, tested, and deployed continuously
+
+Core goals of DevOps:
+
+Faster delivery
+Better collaboration
+Higher reliability
+More automation
+Continuous improvement
+
+Important DevOps concepts:
+
+Continuous Integration (CI)
+Developers regularly merge code into a shared repository.
+Each change is automatically built and tested.
+
+Benefits:
+
+Detect bugs early
+Reduce integration problems
+Improve code quality
+Continuous Delivery (CD)
+After code passes tests, it is automatically prepared for release.
+Continuous Deployment
+Every verified change is automatically deployed to production without manual intervention.
+Infrastructure as Code (IaC)
+Infrastructure is managed using code instead of manual setup.
+
+Examples:
+
+Terraform
+Ansible
+CloudFormation
+Monitoring and Logging
+Track system health, errors, and performance after deployment.
+
+Examples:
+
+Prometheus
+Grafana
+ELK Stack
+Containerization
+Applications are packaged with dependencies so they run the same everywhere.
+
+Example:
+
+Docker
+Orchestration
+Managing multiple containers and services.
+
+Example:
+
+Kubernetes
+
+DevOps lifecycle:
+
+Plan
+Develop
+Build
+Test
+Release
+Deploy
+Operate
+Monitor
+
+Popular DevOps tools:
+
+Git and GitHub
+GitHub Actions
+Jenkins
+Docker
+Kubernetes
+Terraform
+Ansible
+Prometheus
+Grafana
+Nginx
+AWS / Azure / GCP
+
+Example DevOps workflow:
+
+Developer pushes code to GitHub
+CI pipeline runs tests automatically
+Docker image is built
+Application is deployed to server or cloud
+Monitoring checks system performance
+Logs help detect issues
+
+Benefits of DevOps:
+
+Faster development and deployment
+Improved software quality
+Better team collaboration
+Reduced manual errors
+Faster bug fixing
+More reliable releases
+
+Challenges:
+
+Cultural change in teams
+Learning new tools
+Initial setup complexity
+Security integration needed
+
+DevSecOps:
+DevSecOps means integrating security into the DevOps process.
+Security is considered from the beginning, not added at the end.
+
+Examples:
+
+Vulnerability scanning
+Secret management
+Secure CI/CD pipelines
+Access control
+
+Why DevOps is important today:
+Modern software systems need frequent updates, cloud deployment, and reliable uptime. DevOps helps teams deliver software quickly while maintaining stability and quality.
+
+In summary, DevOps is a modern software delivery approach that focuses on collaboration, automation, continuous integration, continuous deployment, and reliable operations.
