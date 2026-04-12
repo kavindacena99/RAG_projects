@@ -1,0 +1,148 @@
+Software Engineering is the systematic process of designing, developing, testing, deploying, and maintaining software in a structured and reliable way.
+
+It is not only about writing code. It also includes planning, teamwork, documentation, testing, quality assurance, and maintenance.
+
+Goal of Software Engineering:
+To build software that is:
+
+Correct
+Reliable
+Scalable
+Maintainable
+Secure
+Efficient
+
+Why Software Engineering is important:
+Without a proper process, software projects can become difficult to manage, full of bugs, late, and hard to maintain.
+
+Main phases of Software Development Life Cycle (SDLC):
+
+Requirement Analysis
+Understand what the user or client needs.
+
+Questions:
+
+What problem are we solving?
+Who are the users?
+What features are required?
+System Design
+Plan how the system will work.
+
+Includes:
+
+Architecture design
+Database design
+UI/UX design
+API design
+Implementation / Coding
+Write the actual code based on the design.
+Testing
+Check whether the software works correctly.
+
+Types of testing:
+
+Unit Testing
+Integration Testing
+System Testing
+Acceptance Testing
+Deployment
+Release the software for users.
+Maintenance
+Fix bugs, improve features, and update the system after release.
+
+Software development models:
+
+Waterfall Model
+Agile Model
+Scrum
+Spiral Model
+DevOps-oriented development
+
+Important software engineering concepts:
+
+Requirements
+Architecture
+Modularity
+Reusability
+Scalability
+Security
+Performance
+Maintainability
+
+Good software qualities:
+
+Correctness
+Reliability
+Efficiency
+Usability
+Maintainability
+Portability
+Security
+
+Common roles in software engineering:
+
+Software Engineer / Developer
+Frontend Developer
+Backend Developer
+Full Stack Developer
+QA Engineer
+DevOps Engineer
+System Architect
+Product Manager
+UI/UX Designer
+
+Important practices:
+
+Version control using Git
+Code review
+Documentation
+Testing
+Debugging
+CI/CD
+Secure coding
+Refactoring
+
+Agile software engineering:
+Agile is a popular way of building software in small, iterative steps.
+Instead of building everything at once, teams deliver features gradually and improve based on feedback.
+
+Agile principles:
+
+Customer collaboration
+Working software
+Fast feedback
+Adaptability
+Team communication
+
+Common tools in Software Engineering:
+
+Git and GitHub
+Jira
+VS Code
+Docker
+Postman
+Jenkins / GitHub Actions
+Figma
+Databases like MySQL, PostgreSQL, MongoDB
+
+Challenges in software engineering:
+
+Changing requirements
+Bugs and technical debt
+Team communication issues
+Time management
+Scaling the system
+Security vulnerabilities
+
+Importance of documentation:
+Documentation helps developers understand the project, maintain it, and onboard new team members.
+
+Examples of documentation:
+
+Requirement documents
+API documentation
+Architecture diagrams
+README files
+User manuals
+
+In summary, Software Engineering is the disciplined process of building software systems in a way that is organized, efficient, and maintainable.

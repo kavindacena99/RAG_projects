@@ -1,0 +1,124 @@
+Deep Learning is a subset of Machine Learning that uses artificial neural networks with many layers to learn complex patterns from large amounts of data.
+
+Deep learning is inspired by the human brain, where neurons are connected and work together to process information.
+
+Basic idea:
+
+Input data enters the network
+It passes through multiple hidden layers
+Each layer learns different features
+Final output gives prediction or classification
+
+Example:
+In image recognition:
+
+First layer may learn edges
+Next layer may learn shapes
+Deeper layers may learn objects like eyes, faces, or cars
+
+Main component: Neural Network
+
+A neural network contains:
+
+Input layer
+Hidden layers
+Output layer
+
+Important terms:
+
+Neuron: small processing unit
+Weight: importance of input connection
+Bias: extra value to improve learning
+Activation function: decides whether a neuron should activate
+Loss function: measures prediction error
+Backpropagation: method for updating weights
+Epoch: one full pass through the training data
+Batch: smaller portion of training data
+Learning rate: step size for updating weights
+
+Common activation functions:
+
+ReLU
+Sigmoid
+Tanh
+Softmax
+
+Types of Deep Learning models:
+
+Artificial Neural Network (ANN)
+Used for structured/tabular data.
+Convolutional Neural Network (CNN)
+Mainly used for image-related tasks.
+
+Examples:
+
+Face recognition
+Object detection
+Medical image analysis
+Recurrent Neural Network (RNN)
+Used for sequence data.
+
+Examples:
+
+Text prediction
+Language translation
+Time series forecasting
+LSTM and GRU
+Improved versions of RNN for handling long-term dependencies.
+Transformers
+Very important in modern AI.
+Used in NLP, image tasks, and Generative AI.
+
+Examples:
+
+GPT
+BERT
+Vision Transformers
+
+Deep Learning workflow:
+
+Collect large dataset
+Preprocess data
+Design neural network architecture
+Train model
+Validate model
+Test model
+Deploy model
+
+Why Deep Learning is powerful:
+
+Automatically learns features
+Works very well on large and complex data
+Gives strong results in images, text, audio, and video
+
+Applications:
+
+Image classification
+Object detection
+Speech recognition
+Machine translation
+Self-driving cars
+Chatbots
+Medical analysis
+Recommendation systems
+
+Advantages:
+
+High accuracy on complex tasks
+Learns features automatically
+Can handle unstructured data like images and text
+
+Challenges:
+
+Needs large datasets
+Requires high computational power
+Training can take long time
+Harder to interpret than simpler ML models
+
+Difference between ML and DL:
+
+Machine Learning often needs manual feature engineering
+Deep Learning learns features automatically
+Deep Learning usually requires more data and more computing power
+
+In summary, Deep Learning is an advanced form of Machine Learning that uses multi-layer neural networks to solve complex real-world problems.
