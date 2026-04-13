@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from django.conf import settings
 
-from .gemini_service import generate_embedding
+from .llm_service import generate_embedding, get_embedding_model_name, get_llm_provider
 
 
 def _get_chroma_module():
@@ -44,10 +44,22 @@ def _sanitize_id_part(raw_value: str) -> str:
     return normalized
 
 
+def get_active_collection_name() -> str:
+    base_collection_name = os.getenv("CHROMA_COLLECTION_NAME", "study_notes").strip()
+    if not base_collection_name:
+        base_collection_name = "study_notes"
+
+    provider = get_llm_provider()
+    embedding_model = get_embedding_model_name()
+    safe_model_name = _sanitize_id_part(embedding_model.lower())
+
+    return f"{base_collection_name}_{provider}_{safe_model_name}"
+
+
 def get_collection():
     chromadb = _get_chroma_module()
     persist_dir = _get_persist_dir()
-    collection_name = os.getenv("CHROMA_COLLECTION_NAME", "study_notes")
+    collection_name = get_active_collection_name()
 
     try:
         client = chromadb.PersistentClient(path=persist_dir)
@@ -114,6 +126,7 @@ def add_note_chunks(
         raise RuntimeError(f"Failed to store note chunks in Chroma: {exc}") from exc
 
     return {
+        "collection": get_active_collection_name(),
         "title": clean_title,
         "topic": clean_topic,
         "source": clean_source,
@@ -123,7 +136,7 @@ def add_note_chunks(
     }
 
 
-def query_similar_chunks(query_embedding: list[float], top_k: int = 3) -> dict:
+def query_similar_chunks(query_embedding: list[float], top_k: int = 5) -> dict:
     if not query_embedding:
         raise ValueError("query_embedding cannot be empty.")
     if top_k <= 0:

@@ -1,9 +1,14 @@
-import os
 import logging
+import os
 
-from .chroma_service import add_note_chunks, query_similar_chunks
+from .chroma_service import (
+    add_note_chunks,
+    get_active_collection_name,
+    query_similar_chunks,
+)
 from .chunking_service import chunk_text
-from .gemini_service import generate_answer, generate_embedding
+from .llm_service import generate_answer, generate_embedding, get_llm_provider
+from .reranking_service import rerank_chunks
 
 logger = logging.getLogger("rag.pipeline")
 
@@ -21,6 +26,28 @@ def _parse_top_k() -> int:
     except (TypeError, ValueError):
         top_k = 3
     return max(top_k, 1)
+
+
+def _parse_retrieve_k() -> int:
+    raw_value = os.getenv("RAG_RETRIEVE_K", "8")
+    try:
+        retrieve_k = int(raw_value)
+    except (TypeError, ValueError):
+        retrieve_k = 8
+    return max(retrieve_k, 1)
+
+
+def _parse_final_top_n() -> int:
+    raw_value = os.getenv("RAG_FINAL_TOP_N", str(_parse_top_k()))
+    try:
+        final_top_n = int(raw_value)
+    except (TypeError, ValueError):
+        final_top_n = _parse_top_k()
+    return max(final_top_n, 1)
+
+
+def _is_reranking_enabled() -> bool:
+    return os.getenv("RAG_ENABLE_RERANKING", "true").strip().lower() == "true"
 
 
 def ingest_note(
@@ -79,6 +106,8 @@ def ingest_note(
 
     return {
         "message": "Note ingested, embedded, and stored successfully",
+        "provider": get_llm_provider(),
+        "collection": storage_result["collection"],
         "title": storage_result["title"],
         "topic": storage_result["topic"],
         "source": storage_result["source"],
@@ -104,6 +133,7 @@ def _normalize_chroma_results(query_results: dict) -> list[dict]:
             "id": chunk_id,
             "text": documents[index] if index < len(documents) else "",
             "metadata": metadatas[index] if index < len(metadatas) else {},
+            "retrieval_position": index + 1,
         }
 
         if index < len(distances):
@@ -122,28 +152,69 @@ def ask_question(question: str, top_k: int | None = None) -> dict:
     if not clean_question:
         raise ValueError("question is required.")
 
-    effective_top_k = top_k or _parse_top_k()
+    retrieve_k = _parse_retrieve_k()
+    final_top_n = top_k or _parse_final_top_n()
+    reranking_enabled = _is_reranking_enabled()
     logger.info(
-        "ask flow started | question_chars=%d top_k=%d",
+        "ask flow started | question_chars=%d retrieve_k=%d final_top_n=%d reranking_enabled=%s",
         len(clean_question),
-        effective_top_k,
+        retrieve_k,
+        final_top_n,
+        reranking_enabled,
     )
     question_embedding = generate_embedding(clean_question)
     if not question_embedding:
         raise RuntimeError("Question embedding generation returned an empty vector.")
 
-    query_results = query_similar_chunks(question_embedding, top_k=effective_top_k)
-    retrieved_chunks = _normalize_chroma_results(query_results)
+    query_results = query_similar_chunks(question_embedding, top_k=retrieve_k)
+    retrieved_chunks_initial = _normalize_chroma_results(query_results)
     logger.info(
-        "ask retrieval completed | retrieved_chunks=%d",
-        len(retrieved_chunks),
+        "ask retrieval completed | retrieved_chunks_initial=%d",
+        len(retrieved_chunks_initial),
     )
-    answer = generate_answer(clean_question, retrieved_chunks)
+
+    reranking_fallback_used = False
+    reranking_error = None
+
+    if reranking_enabled:
+        try:
+            retrieved_chunks_final = rerank_chunks(
+                clean_question,
+                retrieved_chunks_initial,
+                final_top_n=final_top_n,
+            )
+        except Exception as exc:
+            reranking_fallback_used = True
+            reranking_error = str(exc)
+            logger.warning(
+                "reranking failed, using retrieval order fallback | error=%s",
+                reranking_error,
+            )
+            retrieved_chunks_final = [
+                dict(chunk) for chunk in retrieved_chunks_initial[:final_top_n]
+            ]
+            for position, chunk in enumerate(retrieved_chunks_final, start=1):
+                chunk["rerank_position"] = position
+    else:
+        retrieved_chunks_final = [
+            dict(chunk) for chunk in retrieved_chunks_initial[:final_top_n]
+        ]
+        for position, chunk in enumerate(retrieved_chunks_final, start=1):
+            chunk["rerank_position"] = position
+
+    answer = generate_answer(clean_question, retrieved_chunks_final)
     logger.info("ask flow completed | answer_chars=%d", len(answer))
 
     return {
+        "provider": get_llm_provider(),
+        "collection": get_active_collection_name(),
         "question": clean_question,
+        "reranking_enabled": reranking_enabled,
+        "reranking_fallback_used": reranking_fallback_used,
+        "reranking_error": reranking_error,
+        "total_retrieved_initial": len(retrieved_chunks_initial),
+        "total_retrieved_final": len(retrieved_chunks_final),
+        "retrieved_chunks_initial": retrieved_chunks_initial,
+        "retrieved_chunks_final": retrieved_chunks_final,
         "answer": answer,
-        "retrieved_chunks": retrieved_chunks,
-        "total_retrieved": len(retrieved_chunks),
     }
