@@ -4,9 +4,11 @@ from rest_framework.views import APIView
 
 from .serializers import (
     AskQuestionSerializer,
+    EvaluateRagSerializer,
     IngestKnowledgeDirectorySerializer,
     IngestNoteSerializer,
 )
+from .services.evaluation_service import evaluate_all_cases
 from .services.file_ingestion_service import ingest_knowledge_directory
 from .services.rag_service import ask_question, ingest_note
 
@@ -34,9 +36,9 @@ class HealthCheckView(APIView):
 class NoteIngestView(APIView):
     def post(self, request):
         chunk_size = _parse_int_query_param(
-            request.query_params.get("chunk_size"), 500
+            request.query_params.get("chunk_size"), 400
         )
-        overlap = _parse_int_query_param(request.query_params.get("overlap"), 0)
+        overlap = _parse_int_query_param(request.query_params.get("overlap"), 80)
 
         if chunk_size is None or chunk_size <= 0:
             return Response(
@@ -147,5 +149,38 @@ class AskQuestionView(APIView):
         except Exception as exc:
             return Response(
                 {"error": f"Unexpected ask error: {exc}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class EvaluationView(APIView):
+    def get(self, request):
+        file_path = request.query_params.get("file_path")
+        return self._run_evaluation(file_path=file_path)
+
+    def post(self, request):
+        serializer = EvaluateRagSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return self._run_evaluation(
+            file_path=serializer.validated_data.get("file_path")
+        )
+
+    def _run_evaluation(self, file_path: str | None = None):
+        try:
+            result = evaluate_all_cases(file_path=file_path)
+            return Response(result, status=status.HTTP_200_OK)
+        except (FileNotFoundError, ValueError) as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except RuntimeError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        except Exception as exc:
+            return Response(
+                {"error": f"Unexpected evaluation error: {exc}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

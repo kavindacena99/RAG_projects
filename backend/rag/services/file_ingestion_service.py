@@ -4,8 +4,9 @@ from pathlib import Path
 
 from django.conf import settings
 
-from .chroma_service import add_note_chunks
+from .chroma_service import add_note_chunks, get_active_collection_name
 from .chunking_service import chunk_text
+from .llm_service import get_llm_provider
 
 logger = logging.getLogger(__name__)
 SUPPORTED_EXTENSIONS = {".txt"}
@@ -132,6 +133,8 @@ def ingest_knowledge_directory(
 
     return {
         "message": "Knowledge directory ingested successfully",
+        "provider": get_llm_provider(),
+        "collection": get_active_collection_name(),
         "base_path": _to_project_relative_path(base_dir),
         "total_files_found": len(files),
         "total_files_ingested": len(ingested_files),

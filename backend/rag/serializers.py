@@ -26,3 +26,7 @@ class NoteIngestSerializer(IngestNoteSerializer):
 
 class AskQuestionSerializer(serializers.Serializer):
     question = serializers.CharField(required=True, allow_blank=False)
+
+
+class EvaluateRagSerializer(serializers.Serializer):
+    file_path = serializers.CharField(required=False, allow_blank=False)

@@ -1,0 +1,12 @@
+[
+  {
+    "question": "What is basic concepts of machine learning?",
+    "expected_topic": "machine_learning",
+    "expected_keywords": ["retrieval", "embeddings", "search"]
+  },
+  {
+    "question": "What is CI/CD?",
+    "expected_topic": "devops",
+    "expected_keywords": ["continuous", "integration", "deployment"]
+  }
+]

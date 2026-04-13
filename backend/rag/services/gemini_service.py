@@ -1,3 +1,4 @@
+import json
 import os
 import time
 import uuid
@@ -80,6 +81,48 @@ def _extract_usage_metadata(response) -> dict:
     return usage_dict
 
 
+def _extract_json_payload(text: str) -> dict:
+    clean_text = (text or "").strip()
+    if not clean_text:
+        raise RuntimeError("LLM response did not include JSON text.")
+
+    try:
+        return json.loads(clean_text)
+    except json.JSONDecodeError:
+        start = clean_text.find("{")
+        end = clean_text.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise RuntimeError("LLM response did not contain valid JSON.")
+
+        try:
+            return json.loads(clean_text[start : end + 1])
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("LLM response contained invalid JSON.") from exc
+
+
+def _build_rerank_prompt(question: str, chunks: list[dict]) -> str:
+    chunk_lines = []
+    for chunk in chunks:
+        chunk_lines.append(
+            (
+                f"id: {chunk.get('id', '')}\n"
+                f"text: {chunk.get('text', '')}"
+            )
+        )
+
+    chunk_block = "\n\n".join(chunk_lines)
+    return (
+        "You are ranking study-note chunks for retrieval.\n"
+        "For each chunk, give a relevance score from 0 to 10 for how useful it is "
+        "for answering the question.\n"
+        "Return strict JSON in this exact shape:\n"
+        "{\"scores\": [{\"id\": \"chunk_id\", \"score\": 8.5}]}\n"
+        "Use every chunk id exactly once. Do not include any extra text.\n\n"
+        f"Question:\n{question}\n\n"
+        f"Candidate chunks:\n{chunk_block}"
+    )
+
+
 def generate_embedding(text: str) -> list[float]:
     clean_text = (text or "").strip()
     if not clean_text:
@@ -127,6 +170,69 @@ def generate_embedding(text: str) -> list[float]:
     )
 
     return vector
+
+
+def score_chunks_for_reranking(question: str, chunks: list[dict]) -> dict[str, float]:
+    clean_question = (question or "").strip()
+    if not clean_question:
+        raise ValueError("Question is required for reranking.")
+    if not chunks:
+        return {}
+
+    client = _get_gemini_client()
+    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    prompt = _build_rerank_prompt(clean_question, chunks)
+    request_id = uuid.uuid4().hex[:8]
+    started_at = time.perf_counter()
+
+    logger.info(
+        "rerank request started | provider=gemini request_id=%s model=%s candidate_chunks=%d",
+        request_id,
+        model,
+        len(chunks),
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+        )
+    except Exception as exc:
+        logger.exception(
+            "rerank request failed | provider=gemini request_id=%s model=%s",
+            request_id,
+            model,
+        )
+        raise RuntimeError(f"Gemini reranking failed: {exc}") from exc
+
+    response_text = _extract_generated_text(response)
+    payload = _extract_json_payload(response_text)
+    scores = payload.get("scores", [])
+
+    score_map = {}
+    for item in scores:
+        if not isinstance(item, dict):
+            continue
+        chunk_id = item.get("id")
+        score = item.get("score")
+        if chunk_id is None or score is None:
+            continue
+        try:
+            score_map[str(chunk_id)] = float(score)
+        except (TypeError, ValueError):
+            continue
+
+    elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    usage = _extract_usage_metadata(response)
+    logger.info(
+        "rerank request completed | provider=gemini request_id=%s scored_chunks=%d elapsed_ms=%s usage=%s",
+        request_id,
+        len(score_map),
+        elapsed_ms,
+        usage or "{}",
+    )
+
+    return score_map
 
 
 def _format_context_chunks(context_chunks: list[dict]) -> str:
@@ -205,9 +311,9 @@ def generate_answer(
     request_id = uuid.uuid4().hex[:8]
 
     prompt = (
-        "You are a helpful study assistant.\n"
-        "Answer only using the context below.\n"
-        "If the answer is not present in the context, say clearly: "
+        "You are a helpful study assistant in Information Technology, Computer Science, Artificial Intelligence, Data Scence and DevOps.\n"
+        "Use the provided context to answer the question.\n" #Answer only using the context below.\n
+        "If the answer is not partially available, combine theinformation and explain clearly: "
         "\"I could not find this in the provided notes.\"\n\n"
         f"Question:\n{clean_question}\n\n"
         f"Context:\n{context_text}\n\n"
