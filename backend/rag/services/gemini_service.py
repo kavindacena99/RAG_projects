@@ -313,7 +313,10 @@ def generate_answer(
     prompt = (
         "You are a helpful study assistant in Information Technology, Computer Science, Artificial Intelligence, Data Scence and DevOps.\n"
         "Use the provided context to answer the question.\n" #Answer only using the context below.\n
-        "If the answer is not partially available, combine theinformation and explain clearly: "
+        "You may combine information from multiple retrieved chunks if needed.\n"
+        "If the answer is partially present across several chunks, combine those details into one clear explanation.\n"
+        "Do not make up facts that are not supported by the context.\n"
+        "Answer clearly and simply, as if explaining to a student.\n"
         "\"I could not find this in the provided notes.\"\n\n"
         f"Question:\n{clean_question}\n\n"
         f"Context:\n{context_text}\n\n"
