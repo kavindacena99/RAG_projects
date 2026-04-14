@@ -4,6 +4,13 @@ import time
 import uuid
 import logging
 
+from .llm_service import (
+    EMPTY_ANSWER_FALLBACK_MESSAGE,
+    NO_CONTEXT_ANSWER_MESSAGE,
+    build_rag_prompt,
+    extract_context_topics,
+)
+
 logger = logging.getLogger("rag.llm")
 
 def _get_gemini_client():
@@ -235,28 +242,6 @@ def score_chunks_for_reranking(question: str, chunks: list[dict]) -> dict[str, f
     return score_map
 
 
-def _format_context_chunks(context_chunks: list[dict]) -> str:
-    if not context_chunks:
-        return "No context chunks were found."
-
-    formatted_chunks = []
-    for position, chunk in enumerate(context_chunks, start=1):
-        metadata = chunk.get("metadata") or {}
-        formatted_chunks.append(
-            (
-                f"Chunk {position}\n"
-                f"- id: {chunk.get('id', '')}\n"
-                f"- title: {metadata.get('title', '')}\n"
-                f"- topic: {metadata.get('topic', '')}\n"
-                f"- source: {metadata.get('source', '')}\n"
-                f"- chunk_index: {metadata.get('chunk_index', '')}\n"
-                f"- text: {chunk.get('text', '')}"
-            )
-        )
-
-    return "\n\n".join(formatted_chunks)
-
-
 def _extract_generated_text(generate_response) -> str:
     response_text = getattr(generate_response, "text", None)
     if response_text:
@@ -289,6 +274,7 @@ def _extract_generated_text(generate_response) -> str:
 def generate_answer(
     question: str,
     context_chunks: list[dict],
+    is_comparison: bool = False,
     model_name: str | None = None,
 ) -> str:
     clean_question = (question or "").strip()
@@ -300,36 +286,27 @@ def generate_answer(
             "answer request skipped | reason=no_context question_chars=%d",
             len(clean_question),
         )
-        return (
-            "I could not find enough relevant context in the stored notes "
-            "to answer this question."
-        )
+        return NO_CONTEXT_ANSWER_MESSAGE
 
     client = _get_gemini_client()
     model = model_name or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    context_text = _format_context_chunks(context_chunks)
     request_id = uuid.uuid4().hex[:8]
-
-    prompt = (
-        "You are a helpful study assistant in Information Technology, Computer Science, Artificial Intelligence, Data Scence and DevOps.\n"
-        "Use the provided context to answer the question.\n" #Answer only using the context below.\n
-        "You may combine information from multiple retrieved chunks if needed.\n"
-        "If the answer is partially present across several chunks, combine those details into one clear explanation.\n"
-        "Do not make up facts that are not supported by the context.\n"
-        "Answer clearly and simply, as if explaining to a student.\n"
-        "\"I could not find this in the provided notes.\"\n\n"
-        f"Question:\n{clean_question}\n\n"
-        f"Context:\n{context_text}\n\n"
-        "Answer:"
+    prompt = build_rag_prompt(
+        clean_question,
+        context_chunks,
+        is_comparison=is_comparison,
     )
+    context_topics = extract_context_topics(context_chunks)
 
     started_at = time.perf_counter()
     logger.info(
-        "answer request started | request_id=%s model=%s question_chars=%d context_chunks=%d prompt_chars=%d",
+        "answer generation | request_id=%s model=%s question_chars=%d context_chunks=%d comparison=%s topics=%s prompt_chars=%d",
         request_id,
         model,
         len(clean_question),
         len(context_chunks),
+        is_comparison,
+        context_topics,
         len(prompt),
     )
 
@@ -344,13 +321,11 @@ def generate_answer(
             request_id,
             model,
         )
-        raise RuntimeError(f"Gemini answer generation failed: {exc}") from exc
+        return NO_CONTEXT_ANSWER_MESSAGE
 
     answer = _extract_generated_text(generate_response)
     if not answer:
-        raise RuntimeError(
-            "Gemini response did not include answer text."
-        )
+        answer = EMPTY_ANSWER_FALLBACK_MESSAGE
 
     elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
     usage = _extract_usage_metadata(generate_response)

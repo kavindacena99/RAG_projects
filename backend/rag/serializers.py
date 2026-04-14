@@ -30,3 +30,7 @@ class AskQuestionSerializer(serializers.Serializer):
 
 class EvaluateRagSerializer(serializers.Serializer):
     file_path = serializers.CharField(required=False, allow_blank=False)
+
+
+class ChromaCleanupSerializer(serializers.Serializer):
+    dry_run = serializers.BooleanField(required=False, default=True)

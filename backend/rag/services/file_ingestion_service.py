@@ -5,7 +5,7 @@ from pathlib import Path
 from django.conf import settings
 
 from .chroma_service import add_note_chunks, get_active_collection_name
-from .chunking_service import chunk_text
+from .chunking_service import semantic_chunk_pipeline
 from .llm_service import get_llm_provider
 
 logger = logging.getLogger(__name__)
@@ -68,15 +68,15 @@ def _derive_topic_and_source(file_path: Path, base_dir: Path) -> tuple[str, str]
 
 def ingest_knowledge_directory(
     base_path: str | None = None,
-    chunk_size: int = 500,
-    overlap: int = 0,
 ) -> dict:
     base_dir = resolve_knowledge_base_path(base_path)
     files = scan_knowledge_files(str(base_dir))
 
     ingested_files = []
     skipped_files = []
+    total_chunks_generated = 0
     total_chunks_stored = 0
+    total_duplicate_chunks_skipped = 0
 
     for file_path in files:
         try:
@@ -102,7 +102,7 @@ def ingest_knowledge_directory(
         title = file_path.stem
 
         try:
-            chunks = chunk_text(file_content, chunk_size=chunk_size, overlap=overlap)
+            chunks = semantic_chunk_pipeline(file_content)
             if not chunks:
                 skipped_files.append(
                     {"source": source, "reason": "No chunks generated from file content."}
@@ -120,25 +120,35 @@ def ingest_knowledge_directory(
             skipped_files.append({"source": source, "reason": str(exc)})
             continue
 
-        chunk_count = len(storage_result["ids"])
+        chunks_generated = storage_result["total_chunks_generated"]
+        chunk_count = storage_result["new_chunks_stored"]
+        duplicate_chunk_count = storage_result["duplicate_chunks_skipped"]
+        total_chunks_generated += chunks_generated
         total_chunks_stored += chunk_count
+        total_duplicate_chunks_skipped += duplicate_chunk_count
         ingested_files.append(
             {
                 "title": title,
                 "topic": storage_result["topic"],
                 "source": storage_result["source"],
+                "chunks_generated": chunks_generated,
+                "new_chunks_stored": chunk_count,
+                "duplicate_chunks_skipped": duplicate_chunk_count,
                 "chunks_stored": chunk_count,
             }
         )
 
     return {
         "message": "Knowledge directory ingested successfully",
+        "chunking_strategy": "semantic",
         "provider": get_llm_provider(),
         "collection": get_active_collection_name(),
         "base_path": _to_project_relative_path(base_dir),
         "total_files_found": len(files),
         "total_files_ingested": len(ingested_files),
+        "total_chunks_generated": total_chunks_generated,
         "total_chunks_stored": total_chunks_stored,
+        "total_duplicate_chunks_skipped": total_duplicate_chunks_skipped,
         "files": ingested_files,
         "skipped_files": skipped_files,
     }
