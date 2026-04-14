@@ -4,10 +4,12 @@ from rest_framework.views import APIView
 
 from .serializers import (
     AskQuestionSerializer,
+    ChromaCleanupSerializer,
     EvaluateRagSerializer,
     IngestKnowledgeDirectorySerializer,
     IngestNoteSerializer,
 )
+from .services.chroma_cleanup_service import cleanup_duplicate_chunks
 from .services.evaluation_service import evaluate_all_cases
 from .services.file_ingestion_service import ingest_knowledge_directory
 from .services.rag_service import ask_question, ingest_note
@@ -35,29 +37,6 @@ class HealthCheckView(APIView):
 
 class NoteIngestView(APIView):
     def post(self, request):
-        chunk_size = _parse_int_query_param(
-            request.query_params.get("chunk_size"), 400
-        )
-        overlap = _parse_int_query_param(request.query_params.get("overlap"), 80)
-
-        if chunk_size is None or chunk_size <= 0:
-            return Response(
-                {"detail": "chunk_size must be a positive integer."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if overlap is None or overlap < 0:
-            return Response(
-                {"detail": "overlap must be 0 or a positive integer."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if overlap >= chunk_size:
-            return Response(
-                {"detail": "overlap must be smaller than chunk_size."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         if "ingest_from_knowledge_dir" in request.data:
             directory_serializer = IngestKnowledgeDirectorySerializer(data=request.data)
             directory_serializer.is_valid(raise_exception=True)
@@ -68,8 +47,6 @@ class NoteIngestView(APIView):
             try:
                 result = ingest_knowledge_directory(
                     base_path=requested_base_dir,
-                    chunk_size=chunk_size,
-                    overlap=overlap,
                 )
                 return Response(result, status=status.HTTP_200_OK)
             except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
@@ -97,8 +74,6 @@ class NoteIngestView(APIView):
                 content=serializer.validated_data["content"],
                 topic=serializer.validated_data.get("topic"),
                 source=serializer.validated_data.get("source"),
-                chunk_size=chunk_size,
-                overlap=overlap,
             )
             return Response(result, status=status.HTTP_200_OK)
         except ValueError as exc:
@@ -182,5 +157,32 @@ class EvaluationView(APIView):
         except Exception as exc:
             return Response(
                 {"error": f"Unexpected evaluation error: {exc}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class ChromaCleanupDuplicatesView(APIView):
+    def post(self, request):
+        serializer = ChromaCleanupSerializer(data=request.data or {})
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = cleanup_duplicate_chunks(
+                dry_run=serializer.validated_data.get("dry_run", True)
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except RuntimeError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        except Exception as exc:
+            return Response(
+                {"error": f"Unexpected cleanup error: {exc}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

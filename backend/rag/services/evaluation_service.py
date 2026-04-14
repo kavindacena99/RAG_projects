@@ -4,6 +4,7 @@ from pathlib import Path
 from django.conf import settings
 
 from .rag_service import ask_question
+from rag.utils.topic_normalizer import normalize_topic
 
 
 def _resolve_evaluation_file_path(file_path: str | None = None) -> Path:
@@ -25,7 +26,7 @@ def _to_backend_relative_path(path: Path) -> str:
 
 
 def _normalize_topic(value: str | None) -> str:
-    return (value or "").strip().lower()
+    return normalize_topic((value or "").strip())
 
 
 def _extract_chunk_topics(chunks: list[dict]) -> list[str]:
@@ -180,7 +181,7 @@ def load_evaluation_cases(file_path: str | None = None) -> list[dict]:
         normalized_cases.append(
             {
                 "question": question,
-                "expected_topic": expected_topic,
+                "expected_topic": normalize_topic(expected_topic),
                 "expected_keywords": clean_keywords,
             }
         )

@@ -4,6 +4,13 @@ import os
 import time
 import uuid
 
+from .llm_service import (
+    EMPTY_ANSWER_FALLBACK_MESSAGE,
+    NO_CONTEXT_ANSWER_MESSAGE,
+    build_rag_prompt,
+    extract_context_topics,
+)
+
 logger = logging.getLogger("rag.llm")
 
 
@@ -88,28 +95,6 @@ def _build_rerank_prompt(question: str, chunks: list[dict]) -> str:
         f"Question:\n{question}\n\n"
         f"Candidate chunks:\n{chunk_block}"
     )
-
-
-def _format_context_chunks(context_chunks: list[dict]) -> str:
-    if not context_chunks:
-        return "No context chunks were found."
-
-    formatted_chunks = []
-    for position, chunk in enumerate(context_chunks, start=1):
-        metadata = chunk.get("metadata") or {}
-        formatted_chunks.append(
-            (
-                f"Chunk {position}\n"
-                f"- id: {chunk.get('id', '')}\n"
-                f"- title: {metadata.get('title', '')}\n"
-                f"- topic: {metadata.get('topic', '')}\n"
-                f"- source: {metadata.get('source', '')}\n"
-                f"- chunk_index: {metadata.get('chunk_index', '')}\n"
-                f"- text: {chunk.get('text', '')}"
-            )
-        )
-
-    return "\n\n".join(formatted_chunks)
 
 
 def generate_embedding(text: str) -> list[float]:
@@ -231,6 +216,7 @@ def score_chunks_for_reranking(question: str, chunks: list[dict]) -> dict[str, f
 def generate_answer(
     question: str,
     context_chunks: list[dict],
+    is_comparison: bool = False,
     model_name: str | None = None,
 ) -> str:
     clean_question = (question or "").strip()
@@ -242,33 +228,27 @@ def generate_answer(
             "answer request skipped | provider=openai reason=no_context question_chars=%d",
             len(clean_question),
         )
-        return (
-            "I could not find enough relevant context in the stored notes "
-            "to answer this question."
-        )
+        return NO_CONTEXT_ANSWER_MESSAGE
 
     client = _get_openai_client()
     model = model_name or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-    context_text = _format_context_chunks(context_chunks)
     request_id = uuid.uuid4().hex[:8]
-
-    prompt = (
-        "You are a helpful study assistant.\n"
-        "Answer only using the context below.\n"
-        "If the answer is not present in the context, say clearly: "
-        "\"I could not find this in the provided notes.\"\n\n"
-        f"Question:\n{clean_question}\n\n"
-        f"Context:\n{context_text}\n\n"
-        "Answer:"
+    prompt = build_rag_prompt(
+        clean_question,
+        context_chunks,
+        is_comparison=is_comparison,
     )
+    context_topics = extract_context_topics(context_chunks)
 
     started_at = time.perf_counter()
     logger.info(
-        "answer request started | provider=openai request_id=%s model=%s question_chars=%d context_chunks=%d prompt_chars=%d",
+        "answer generation | provider=openai request_id=%s model=%s question_chars=%d context_chunks=%d comparison=%s topics=%s prompt_chars=%d",
         request_id,
         model,
         len(clean_question),
         len(context_chunks),
+        is_comparison,
+        context_topics,
         len(prompt),
     )
 
@@ -283,11 +263,11 @@ def generate_answer(
             request_id,
             model,
         )
-        raise RuntimeError(f"OpenAI answer generation failed: {exc}") from exc
+        return NO_CONTEXT_ANSWER_MESSAGE
 
     answer = (getattr(response, "output_text", None) or "").strip()
     if not answer:
-        raise RuntimeError("OpenAI response did not include answer text.")
+        answer = EMPTY_ANSWER_FALLBACK_MESSAGE
 
     elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
     usage = _extract_usage_metadata(response)
