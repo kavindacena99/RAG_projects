@@ -69,6 +69,31 @@ def generate_answer(
     raise RuntimeError(f"Unsupported LLM provider: {provider}")
 
 
+def generate_text_from_prompt(
+    prompt: str,
+    model_name: str | None = None,
+    max_output_tokens: int | None = None,
+) -> str:
+    provider = get_llm_provider()
+    if provider == "gemini":
+        from . import gemini_service
+
+        return gemini_service.generate_text_from_prompt(
+            prompt,
+            model_name=model_name,
+            max_output_tokens=max_output_tokens,
+        )
+    if provider == "openai":
+        from . import openai_service
+
+        return openai_service.generate_text_from_prompt(
+            prompt,
+            model_name=model_name,
+            max_output_tokens=max_output_tokens,
+        )
+    raise RuntimeError(f"Unsupported LLM provider: {provider}")
+
+
 def score_chunks_for_reranking(
     question: str,
     chunks: list[dict],

@@ -280,3 +280,30 @@ def generate_answer(
     )
 
     return answer
+
+
+def generate_text_from_prompt(
+    prompt: str,
+    model_name: str | None = None,
+    max_output_tokens: int | None = None,
+) -> str:
+    clean_prompt = (prompt or "").strip()
+    if not clean_prompt:
+        raise ValueError("Prompt is required.")
+
+    client = _get_openai_client()
+    model = model_name or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+    request_options = {
+        "model": model,
+        "input": clean_prompt,
+    }
+    if max_output_tokens is not None:
+        request_options["max_output_tokens"] = max_output_tokens
+
+    try:
+        response = client.responses.create(**request_options)
+    except Exception as exc:
+        logger.exception("generic prompt generation failed | provider=openai model=%s", model)
+        raise RuntimeError(f"OpenAI prompt generation failed: {exc}") from exc
+
+    return (getattr(response, "output_text", None) or "").strip()
