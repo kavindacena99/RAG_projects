@@ -338,3 +338,32 @@ def generate_answer(
     )
 
     return answer
+
+
+def generate_text_from_prompt(
+    prompt: str,
+    model_name: str | None = None,
+    max_output_tokens: int | None = None,
+) -> str:
+    clean_prompt = (prompt or "").strip()
+    if not clean_prompt:
+        raise ValueError("Prompt is required.")
+
+    client = _get_gemini_client()
+    model = model_name or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+    generation_config = {}
+    if max_output_tokens is not None:
+        generation_config["max_output_tokens"] = max_output_tokens
+
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=clean_prompt,
+            config=generation_config or None,
+        )
+    except Exception as exc:
+        logger.exception("generic prompt generation failed | provider=gemini model=%s", model)
+        raise RuntimeError(f"Gemini prompt generation failed: {exc}") from exc
+
+    return _extract_generated_text(response).strip()

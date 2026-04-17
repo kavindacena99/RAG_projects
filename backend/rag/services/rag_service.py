@@ -372,7 +372,7 @@ def _run_comparison_aware_retrieval(
     return retrieved_chunks_initial, retrieved_chunks_diversified
 
 
-def ask_question(question: str, top_k: int | None = None) -> dict:
+def retrieve_context_for_question(question: str, top_k: int | None = None) -> dict:
     clean_question = (question or "").strip()
     if not clean_question:
         raise ValueError("question is required.")
@@ -527,17 +527,11 @@ def ask_question(question: str, top_k: int | None = None) -> dict:
             if topic not in {normalize_topic(candidate_topic) for candidate_topic in available_candidate_topics}
         ]
 
-    answer = generate_answer(
-        clean_question,
-        retrieved_chunks_final,
-        is_comparison=comparison_question_detected,
-    )
     logger.info(
         "final selection topics | expected_topics=%s final_topics=%s",
         expected_comparison_topics,
         [normalize_topic((chunk.get('metadata') or {}).get('topic', '')) for chunk in retrieved_chunks_final],
     )
-    logger.info("ask flow completed | answer_chars=%d", len(answer))
 
     return {
         "provider": get_llm_provider(),
@@ -576,5 +570,18 @@ def ask_question(question: str, top_k: int | None = None) -> dict:
         "retrieved_chunks_hybrid_ranked": retrieved_chunks_hybrid_ranked,
         "retrieved_chunks_reranked": retrieved_chunks_reranked,
         "retrieved_chunks_final": retrieved_chunks_final,
+    }
+
+
+def ask_question(question: str, top_k: int | None = None) -> dict:
+    retrieval_result = retrieve_context_for_question(question=question, top_k=top_k)
+    answer = generate_answer(
+        retrieval_result["question"],
+        retrieval_result["retrieved_chunks_final"],
+        is_comparison=retrieval_result["comparison_question_detected"],
+    )
+    logger.info("ask flow completed | answer_chars=%d", len(answer))
+    return {
+        **retrieval_result,
         "answer": answer,
     }

@@ -5,6 +5,7 @@ django-cors-headers==4.9.0
 djangorestframework==3.17.1
 google-genai
 openai
+pymysql
 python-dotenv
 rank-bm25
 sqlparse==0.5.5

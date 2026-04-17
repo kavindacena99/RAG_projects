@@ -3,6 +3,12 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
+from rag.services.answer_synthesis_service import (
+    build_answer_plan,
+    build_response_schema,
+    build_synthesis_instructions,
+    detect_answer_mode,
+)
 from rag.services.chroma_cleanup_service import cleanup_duplicate_chunks
 from rag.services.chroma_service import _build_stable_chunk_id, add_note_chunks
 from rag.services.chunking_service import (
@@ -11,7 +17,13 @@ from rag.services.chunking_service import (
     semantic_chunk_text,
     split_large_chunks,
 )
+from rag.services.context_structuring_service import (
+    build_structured_context,
+    deduplicate_chunks,
+    format_structured_context_for_prompt,
+)
 from rag.services.evaluation_service import evaluate_all_cases, evaluate_single_case
+from rag.services.generation_service import generate_answer_text
 from rag.services.hybrid_search_service import (
     apply_hybrid_scoring,
     normalize_keyword_scores,
@@ -20,6 +32,11 @@ from rag.services.hybrid_search_service import (
     score_candidates_with_keywords,
 )
 from rag.services.llm_service import build_rag_prompt, format_chunks
+from rag.services.prompt_builder import (
+    build_answer_prompt,
+    build_strict_output_instructions,
+    validate_response_structure,
+)
 from rag.services.query_analysis_service import (
     extract_comparison_terms,
     is_comparison_question,
@@ -842,6 +859,306 @@ class DuplicateHandlingTests(SimpleTestCase):
         mock_delete_chunks_by_ids.assert_called_once_with(["chunk-b", "chunk-c"])
 
 
+class ContextStructuringServiceTests(SimpleTestCase):
+    def test_deduplicate_chunks_prefers_higher_ranked_chunk(self):
+        result = deduplicate_chunks(
+            [
+                {
+                    "id": "chunk-1",
+                    "text": "Machine Learning learns patterns from data.",
+                    "metadata": {"topic": "ML"},
+                    "rerank_score": 8.0,
+                    "distance": 0.22,
+                },
+                {
+                    "id": "chunk-2",
+                    "text": "Machine   Learning learns patterns from data",
+                    "metadata": {"topic": "machine_learning"},
+                    "rerank_score": 9.5,
+                    "distance": 0.30,
+                },
+            ]
+        )
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], "chunk-2")
+        self.assertEqual(result[0]["metadata"]["topic"], "machine_learning")
+
+    def test_build_structured_context_for_comparison_groups_by_topic(self):
+        structured_context = build_structured_context(
+            [
+                {
+                    "id": "chunk-ml",
+                    "text": "Machine Learning learns patterns from data.",
+                    "metadata": {"topic": "ML", "source": "knowledge/machine_learning/ml.txt"},
+                    "rerank_score": 9.1,
+                },
+                {
+                    "id": "chunk-dl",
+                    "text": "Deep Learning uses multi-layer neural networks.",
+                    "metadata": {"topic": "deep learning", "source": "knowledge/deep_learning/dl.txt"},
+                    "rerank_score": 9.0,
+                },
+            ],
+            "What is the difference between Machine Learning and Deep Learning?",
+            is_comparison=True,
+        )
+
+        self.assertEqual(structured_context["mode"], "comparison")
+        self.assertEqual(
+            structured_context["structured_topics"],
+            ["machine_learning", "deep_learning"],
+        )
+        self.assertEqual(len(structured_context["topics"]), 2)
+
+    def test_format_structured_context_for_prompt_creates_topic_sections(self):
+        formatted_context = format_structured_context_for_prompt(
+            {
+                "mode": "comparison",
+                "topics": [
+                    {
+                        "topic": "machine_learning",
+                        "key_chunks": [
+                            {
+                                "source": "knowledge/machine_learning/ml.txt",
+                                "text": "Machine Learning learns patterns from data.",
+                            }
+                        ],
+                    },
+                    {
+                        "topic": "deep_learning",
+                        "key_chunks": [
+                            {
+                                "source": "knowledge/deep_learning/dl.txt",
+                                "text": "Deep Learning uses layered neural networks.",
+                            }
+                        ],
+                    },
+                ],
+            }
+        )
+
+        self.assertIn("Topic: machine_learning", formatted_context)
+        self.assertIn("Topic: deep_learning", formatted_context)
+        self.assertIn("Machine Learning learns patterns from data.", formatted_context)
+        self.assertIn("Deep Learning uses layered neural networks.", formatted_context)
+
+    def test_build_answer_prompt_uses_structured_context_instead_of_flat_chunks(self):
+        prompt = build_answer_prompt(
+            history=[{"role": "user", "content": "Explain ML and DL."}],
+            standalone_question="What is the difference between Machine Learning and Deep Learning?",
+            structured_context={
+                "mode": "comparison",
+                "topics": [
+                    {
+                        "topic": "machine_learning",
+                        "key_chunks": [
+                            {
+                                "source": "knowledge/machine_learning/ml.txt",
+                                "text": "Machine Learning learns patterns from data.",
+                            }
+                        ],
+                    },
+                    {
+                        "topic": "deep_learning",
+                        "key_chunks": [
+                            {
+                                "source": "knowledge/deep_learning/dl.txt",
+                                "text": "Deep Learning uses neural networks.",
+                            }
+                        ],
+                    },
+                ],
+            },
+            answer_plan={
+                "mode": "comparison",
+                "sections": [
+                    {"name": "Machine Learning"},
+                    {"name": "Deep Learning"},
+                    {"name": "Key Differences or Relationship"},
+                    {"name": "Summary"},
+                ],
+            },
+            synthesis_instructions=(
+                "SYNTHESIS INSTRUCTIONS:\n"
+                "- This is a comparison answer.\n"
+                "- Cover both topics with balanced attention."
+            ),
+            response_schema={
+                "format_name": "comparison_response",
+                "sections": [
+                    "Machine Learning",
+                    "Deep Learning",
+                    "Key Differences or Relationship",
+                    "Summary",
+                ],
+            },
+            is_comparison=True,
+        )
+
+        self.assertIn("STRUCTURED CONTEXT:", prompt)
+        self.assertIn("use both topic sections", prompt.lower())
+        self.assertIn("Topic: machine_learning", prompt)
+        self.assertIn("Topic: deep_learning", prompt)
+        self.assertIn("ANSWER PLAN:", prompt)
+        self.assertIn("SYNTHESIS INSTRUCTIONS:", prompt)
+        self.assertIn("STRICT OUTPUT CONTRACT:", prompt)
+        self.assertIn("Do NOT change headings.", prompt)
+        self.assertIn("FINAL ANSWER (STRICT FORMAT):", prompt)
+        self.assertIn("### Machine Learning", prompt)
+        self.assertIn("### Deep Learning", prompt)
+        self.assertIn("### Key Differences", prompt)
+        self.assertIn("### Summary", prompt)
+
+
+class AnswerSynthesisServiceTests(SimpleTestCase):
+    def test_detect_answer_mode_returns_comparison_for_difference_question(self):
+        self.assertEqual(
+            detect_answer_mode(
+                "What is the difference between Machine Learning and Deep Learning?",
+                is_comparison=True,
+            ),
+            "comparison",
+        )
+
+    def test_build_answer_plan_for_standard_question(self):
+        answer_plan = build_answer_plan(
+            "What is CI/CD?",
+            {
+                "mode": "standard",
+                "primary_topic": "devops",
+                "structured_topics": ["devops"],
+            },
+            is_comparison=False,
+        )
+
+        self.assertEqual(answer_plan["mode"], "definition")
+        self.assertEqual(
+            [section["name"] for section in answer_plan["sections"]],
+            ["Explanation", "Key Points"],
+        )
+        self.assertEqual(answer_plan["topics"], ["devops"])
+
+    def test_build_answer_plan_for_comparison_question(self):
+        answer_plan = build_answer_plan(
+            "What is the difference between Machine Learning and Deep Learning?",
+            {
+                "mode": "comparison",
+                "expected_topics": ["machine_learning", "deep_learning"],
+                "structured_topics": ["machine_learning", "deep_learning"],
+            },
+            is_comparison=True,
+        )
+
+        self.assertEqual(answer_plan["mode"], "comparison")
+        self.assertEqual(
+            [section["name"] for section in answer_plan["sections"]],
+            [
+                "Machine Learning",
+                "Deep Learning",
+                "Key Differences or Relationship",
+                "Summary",
+            ],
+        )
+
+    def test_build_synthesis_instructions_and_response_schema(self):
+        answer_plan = {
+            "mode": "comparison",
+            "topics": ["machine_learning", "deep_learning"],
+            "sections": [
+                {"name": "Machine Learning"},
+                {"name": "Deep Learning"},
+                {"name": "Key Differences or Relationship"},
+                {"name": "Summary"},
+            ],
+            "requirements": ["use both topics", "avoid repetition"],
+        }
+
+        instructions = build_synthesis_instructions(answer_plan)
+        response_schema = build_response_schema(answer_plan)
+
+        self.assertIn("This is a comparison answer.", instructions)
+        self.assertIn("Machine Learning", instructions)
+        self.assertEqual(response_schema["format_name"], "comparison_response")
+        self.assertIn("Summary", response_schema["sections"])
+
+    def test_build_strict_output_instructions_for_standard_mode(self):
+        instructions = build_strict_output_instructions(
+            {
+                "format_name": "definition_response",
+                "sections": ["Explanation", "Key Points"],
+            },
+            "definition",
+        )
+
+        self.assertIn("STRICT OUTPUT CONTRACT:", instructions)
+        self.assertIn("You MUST complete the following structure:", instructions)
+        self.assertIn("### Explanation", instructions)
+        self.assertIn("### Key Points", instructions)
+        self.assertIn("DO NOT merge sections.", instructions)
+
+    def test_build_strict_output_instructions_for_comparison_mode_anchors_headings(self):
+        instructions = build_strict_output_instructions(
+            {
+                "format_name": "comparison_response",
+                "sections": [
+                    "Machine Learning",
+                    "Deep Learning",
+                    "Key Differences or Relationship",
+                    "Summary",
+                ],
+            },
+            "comparison",
+        )
+
+        self.assertIn("You MUST complete the following structure.", instructions)
+        self.assertIn("### Machine Learning", instructions)
+        self.assertIn("### Deep Learning", instructions)
+        self.assertIn("### Key Differences", instructions)
+        self.assertIn("### Summary", instructions)
+
+    def test_validate_response_structure_checks_required_headings(self):
+        valid_response = (
+            "### Explanation\nCI/CD automates integration and delivery.\n\n"
+            "### Key Points\n- automated testing\n- faster releases"
+        )
+        invalid_response = "CI/CD automates integration and delivery."
+
+        schema = {
+            "format_name": "definition_response",
+            "sections": ["Explanation", "Key Points"],
+        }
+
+        self.assertTrue(validate_response_structure(valid_response, schema))
+        self.assertFalse(validate_response_structure(invalid_response, schema))
+
+    def test_validate_response_structure_checks_comparison_headings(self):
+        valid_response = (
+            "### Machine Learning\nPatterns from data.\n\n"
+            "### Deep Learning\nLayered neural networks.\n\n"
+            "### Key Differences\nDeep Learning uses deeper architectures.\n\n"
+            "### Summary\nDeep Learning is a subset of Machine Learning."
+        )
+        invalid_response = (
+            "### Machine Learning\nPatterns from data.\n\n"
+            "### Deep Learning\nLayered neural networks.\n\n"
+            "### Summary\nMissing differences section."
+        )
+
+        schema = {
+            "format_name": "comparison_response",
+            "sections": [
+                "Machine Learning",
+                "Deep Learning",
+                "Key Differences or Relationship",
+                "Summary",
+            ],
+        }
+
+        self.assertTrue(validate_response_structure(valid_response, schema, mode="comparison"))
+        self.assertFalse(validate_response_structure(invalid_response, schema, mode="comparison"))
+
+
 class SharedPromptTests(SimpleTestCase):
     def test_format_chunks_includes_chunk_indices_and_topics(self):
         formatted = format_chunks(
@@ -900,6 +1217,28 @@ class SharedPromptTests(SimpleTestCase):
 
 
 class ProviderAnswerFlowTests(SimpleTestCase):
+    @patch("rag.services.generation_service.generate_text_from_prompt")
+    def test_generate_answer_text_retries_once_when_structure_is_invalid(self, mock_generate_text):
+        mock_generate_text.side_effect = [
+            "Loose answer without headings.",
+            (
+                "### Explanation\nCI/CD automates integration and delivery.\n\n"
+                "### Key Points\n- automated testing\n- faster releases"
+            ),
+        ]
+
+        result = generate_answer_text(
+            "Prompt body",
+            response_schema={
+                "format_name": "definition_response",
+                "sections": ["Explanation", "Key Points"],
+            },
+            output_mode="definition",
+        )
+
+        self.assertIn("### Explanation", result)
+        self.assertEqual(mock_generate_text.call_count, 2)
+
     @patch("rag.services.openai_service._get_openai_client")
     def test_openai_generate_answer_uses_shared_topic_extractor(self, mock_get_openai_client):
         mock_client = mock_get_openai_client.return_value

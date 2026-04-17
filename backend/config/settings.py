@@ -24,6 +24,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
+def _build_database_settings() -> dict:
+    mysql_database = os.getenv("MYSQL_DATABASE", "").strip()
+    if mysql_database:
+        return {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": mysql_database,
+            "USER": os.getenv("MYSQL_USER", "").strip(),
+            "PASSWORD": os.getenv("MYSQL_PASSWORD", "").strip(),
+            "HOST": os.getenv("MYSQL_HOST", "127.0.0.1").strip(),
+            "PORT": os.getenv("MYSQL_PORT", "3306").strip(),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+            },
+        }
+
+    return {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -48,12 +69,16 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'rest_framework',
+    'users',
+    'chat',
     'rag',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -86,10 +111,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': _build_database_settings()
 }
 
 
@@ -122,6 +144,25 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
+
+AUTH_USER_MODEL = 'users.User'
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "core.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.AllowAny",
+    ),
+}
+
+CHAT_MAX_HISTORY_PAIRS = int(os.getenv("CHAT_MAX_HISTORY_PAIRS", "3"))
+RAG_CHAT_MAX_RETRIEVED_CHUNKS = int(os.getenv("RAG_CHAT_MAX_RETRIEVED_CHUNKS", "4"))
+LLM_MAX_OUTPUT_TOKENS = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "512"))
+JWT_ACCESS_TOKEN_LIFETIME_SECONDS = int(
+    os.getenv("JWT_ACCESS_TOKEN_LIFETIME_SECONDS", str(60 * 60 * 24 * 7))
+)
+CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "true").lower() == "true"
 
 
 # Static files (CSS, JavaScript, Images)
@@ -158,6 +199,16 @@ LOGGING = {
         "rag.pipeline": {
             "handlers": ["console"],
             "level": os.getenv("RAG_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        "chat": {
+            "handlers": ["console"],
+            "level": os.getenv("CHAT_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        "users": {
+            "handlers": ["console"],
+            "level": os.getenv("AUTH_LOG_LEVEL", "INFO"),
             "propagate": False,
         },
     },
