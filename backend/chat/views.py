@@ -1,3 +1,4 @@
+from rest_framework.renderers import JSONRenderer
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -5,6 +6,7 @@ from rest_framework.views import APIView
 from core.exceptions import GenerationError
 from core.exceptions import SessionNotFoundError
 from core.permissions import IsAuthenticatedUser
+from .content_negotiation import EventStreamCompatibleContentNegotiation
 from .serializers import (
     ChatSessionSerializer,
     MessageSerializer,
@@ -53,6 +55,8 @@ class ChatMessagesView(APIView):
 
 class SendMessageView(APIView):
     permission_classes = [IsAuthenticatedUser]
+    renderer_classes = [JSONRenderer]
+    content_negotiation_class = EventStreamCompatibleContentNegotiation
 
     def post(self, request):
         serializer = SendMessageSerializer(data=request.data)
