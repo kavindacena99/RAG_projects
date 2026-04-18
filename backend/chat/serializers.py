@@ -8,18 +8,17 @@ class StartSessionSerializer(serializers.Serializer):
 
 
 class SendMessageSerializer(serializers.Serializer):
-    session_id = serializers.IntegerField(required=True, min_value=1)
+    session_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     message = serializers.CharField(required=True, allow_blank=False)
 
 
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
-        fields = ("id", "role", "content", "created_at")
+        fields = ("id", "role", "content", "created_at", "sources", "source_context")
 
 
 class ChatSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatSession
         fields = ("id", "title", "created_at", "updated_at")
-

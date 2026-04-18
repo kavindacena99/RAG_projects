@@ -65,7 +65,7 @@ class SendMessageView(APIView):
         try:
             return ChatService().handle_user_message(
                 user=request.user,
-                session_id=serializer.validated_data["session_id"],
+                session_id=serializer.validated_data.get("session_id"),
                 message_text=serializer.validated_data["message"],
             )
         except SessionNotFoundError as exc:

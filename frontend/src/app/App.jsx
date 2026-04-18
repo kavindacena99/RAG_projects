@@ -3,7 +3,7 @@ import { AppRouter } from './router/AppRouter';
 
 export function App() {
   return (
-    <div className="min-h-screen text-slate-900">
+    <div className="h-full bg-transparent text-slate-900 transition-colors dark:text-slate-100">
       <AppProviders>
         <AppRouter />
       </AppProviders>

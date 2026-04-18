@@ -11,7 +11,7 @@ export function SessionList({
 }) {
   if (isLoading && sessions.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-5">
+      <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-5 dark:border-slate-700 dark:bg-slate-900/60">
         <Spinner label="Loading conversations" />
       </div>
     );

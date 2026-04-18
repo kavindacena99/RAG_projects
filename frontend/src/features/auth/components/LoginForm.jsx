@@ -44,17 +44,17 @@ export function LoginForm() {
   }
 
   return (
-    <div className="w-full rounded-[2rem] border border-white/70 bg-white/90 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur md:p-8">
+    <div className="w-full rounded-[2rem] border border-white/70 bg-white/90 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/80 dark:shadow-[0_24px_60px_rgba(2,6,23,0.45)] md:p-8">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Sign in</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">Sign in</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
           Continue your saved conversations and start new retrieval sessions.
         </p>
       </div>
 
       <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="login-identifier">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="login-identifier">
             Username or email
           </label>
           <Input
@@ -67,7 +67,7 @@ export function LoginForm() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="login-password">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="login-password">
             Password
           </label>
           <Input
@@ -81,7 +81,7 @@ export function LoginForm() {
         </div>
 
         {formError ? (
-          <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200">
             {formError}
           </p>
         ) : null}
@@ -91,9 +91,9 @@ export function LoginForm() {
         </Button>
       </form>
 
-      <p className="mt-6 text-sm text-slate-500">
+      <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
         New here?{' '}
-        <Link className="font-medium text-sky-600 hover:text-sky-700" to="/signup">
+        <Link className="font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300" to="/signup">
           Create an account
         </Link>
       </p>

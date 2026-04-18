@@ -13,19 +13,21 @@ export function MessageBubble({ actions, label, message }) {
     >
       <div
         className={cn(
-          'w-full max-w-full rounded-[1.5rem] px-4 py-3 shadow-sm sm:max-w-[90%] xl:max-w-3xl',
+          'w-full max-w-full rounded-[1.5rem] px-4 py-3 shadow-sm sm:max-w-[90%] lg:max-w-[85%] xl:max-w-3xl',
           message.role === 'user'
-            ? 'bg-slate-900 text-white'
+            ? 'bg-slate-900 text-white dark:bg-sky-500 dark:text-slate-950'
             : message.error
-              ? 'border border-rose-200 bg-rose-50 text-rose-900'
-              : 'border border-slate-200 bg-white text-slate-900',
+              ? 'border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-100'
+              : 'border border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100',
         )}
       >
         <div className="mb-2 flex items-center justify-between gap-3 text-xs">
           <span
             className={cn(
               'font-semibold uppercase tracking-[0.18em]',
-              message.role === 'user' ? 'text-slate-300' : 'text-slate-400',
+              message.role === 'user'
+                ? 'text-slate-300 dark:text-slate-800'
+                : 'text-slate-400 dark:text-slate-500',
             )}
           >
             {label}
@@ -33,7 +35,9 @@ export function MessageBubble({ actions, label, message }) {
           {timestamp ? (
             <time
               className={cn(
-                message.role === 'user' ? 'text-slate-300' : 'text-slate-400',
+                message.role === 'user'
+                  ? 'text-slate-300 dark:text-slate-800'
+                  : 'text-slate-400 dark:text-slate-500',
               )}
               dateTime={message.created_at}
             >
@@ -47,8 +51,8 @@ export function MessageBubble({ actions, label, message }) {
         </p>
       </div>
 
-      <div className="flex w-full max-w-full flex-col gap-2 px-1 sm:max-w-[90%] sm:flex-row sm:items-center sm:justify-between xl:max-w-3xl">
-        <div className="text-xs text-slate-400">
+      <div className="flex w-full max-w-full flex-col gap-2 px-1 sm:max-w-[90%] sm:flex-row sm:items-center sm:justify-between lg:max-w-[85%] xl:max-w-3xl">
+        <div className="text-xs text-slate-400 dark:text-slate-500">
           {message.isStreaming ? 'Streaming response...' : message.error ?? ''}
         </div>
         {actions}

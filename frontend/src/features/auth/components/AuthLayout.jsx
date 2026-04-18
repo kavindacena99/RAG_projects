@@ -1,3 +1,5 @@
+import { ThemeToggle } from '../../../shared/components/ThemeToggle';
+
 export function AuthLayout({
   children,
   description,
@@ -5,9 +7,12 @@ export function AuthLayout({
   title,
 }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-10 px-4 py-6 md:px-6 lg:flex-row lg:items-stretch lg:py-10">
-      <section className="flex flex-1 flex-col justify-between rounded-[2rem] border border-white/60 bg-slate-900 px-6 py-8 text-white shadow-[0_30px_80px_rgba(15,23,42,0.18)] md:px-8 lg:min-h-[calc(100vh-5rem)] lg:px-10">
+    <main className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-6 overflow-y-auto px-4 py-6 md:px-6 lg:flex-row lg:items-stretch lg:py-10">
+      <section className="flex flex-1 flex-col justify-between rounded-[2rem] border border-white/60 bg-slate-900 px-6 py-8 text-white shadow-[0_30px_80px_rgba(15,23,42,0.18)] dark:border-slate-800 dark:bg-slate-950 md:px-8 lg:min-h-[calc(100vh-5rem)] lg:px-10">
         <div>
+          <div className="flex justify-end">
+            <ThemeToggle />
+          </div>
           <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-sky-100">
             {eyebrow}
           </span>

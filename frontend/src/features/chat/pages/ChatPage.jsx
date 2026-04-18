@@ -4,11 +4,11 @@ import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../../shared/components/Button';
 import { EmptyState } from '../../../shared/components/EmptyState';
 import { ErrorState } from '../../../shared/components/ErrorState';
+import { ThemeToggle } from '../../../shared/components/ThemeToggle';
 import { getApiErrorMessage } from '../../../shared/types/api';
 import { useAuth } from '../../auth/hooks/useAuth';
 import { NewChatButton } from '../../sessions/components/NewChatButton';
 import { SessionList } from '../../sessions/components/SessionList';
-import { useCreateSession } from '../../sessions/hooks/useCreateSession';
 import { useDeleteSession } from '../../sessions/hooks/useDeleteSession';
 import { useSessionsQuery } from '../../sessions/hooks/useSessionsQuery';
 import { ChatHeader } from '../components/ChatHeader';
@@ -16,8 +16,8 @@ import { ChatInput } from '../components/ChatInput';
 import { ChatLayout } from '../components/ChatLayout';
 import { MessageList } from '../components/MessageList';
 import { SourcesDrawer } from '../components/SourcesDrawer';
+import { DRAFT_SESSION_KEY, useSendMessageStream } from '../hooks/useSendMessageStream';
 import { useMessagesQuery } from '../hooks/useMessagesQuery';
-import { useSendMessageStream } from '../hooks/useSendMessageStream';
 
 const EMPTY_SESSIONS = [];
 
@@ -34,25 +34,30 @@ export function ChatPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isDraftChat, setIsDraftChat] = useState(false);
   const activeSessionId = readSessionId(searchParams.get('sessionId'));
 
   const { logout, user } = useAuth();
   const sessionsQuery = useSessionsQuery();
-  const createSessionMutation = useCreateSession();
   const deleteSessionMutation = useDeleteSession();
   const messagesQuery = useMessagesQuery(activeSessionId);
   const sendMessageStream = useSendMessageStream();
 
   const sessions = sessionsQuery.data ?? EMPTY_SESSIONS;
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
-  const optimisticMessages = activeSessionId
-    ? sendMessageStream.optimisticMessages[activeSessionId] ?? []
-    : [];
-  const messages = [...(messagesQuery.data ?? []), ...optimisticMessages];
+  const shouldShowDraft =
+    isDraftChat || (!activeSessionId && !sessionsQuery.isLoading && sessions.length === 0);
+  const optimisticKey = activeSessionId ?? (shouldShowDraft ? DRAFT_SESSION_KEY : null);
+  const optimisticMessages =
+    optimisticKey !== null ? sendMessageStream.optimisticMessages[optimisticKey] ?? [] : [];
+  const messages = activeSessionId
+    ? [...(messagesQuery.data ?? []), ...optimisticMessages]
+    : optimisticMessages;
 
   function setActiveSession(sessionId) {
     setSelectedMessage(null);
     setIsSidebarOpen(false);
+    setIsDraftChat(false);
 
     startTransition(() => {
       const nextParams = new URLSearchParams(searchParams);
@@ -68,18 +73,25 @@ export function ChatPage() {
   }
 
   useEffect(() => {
-    if (!activeSessionId && sessions.length > 0) {
+    if (!activeSessionId && !isDraftChat && sessions.length > 0) {
       startTransition(() => {
         const nextParams = new URLSearchParams(searchParams);
         nextParams.set('sessionId', String(sessions[0].id));
         setSearchParams(nextParams, { replace: true });
       });
     }
-  }, [activeSessionId, searchParams, sessions, setSearchParams]);
+  }, [activeSessionId, isDraftChat, searchParams, sessions, setSearchParams]);
 
-  async function handleCreateSession() {
-    const session = await createSessionMutation.mutateAsync();
-    setActiveSession(session.id);
+  function handleStartDraftChat() {
+    setSelectedMessage(null);
+    setIsSidebarOpen(false);
+    setIsDraftChat(true);
+
+    startTransition(() => {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('sessionId');
+      setSearchParams(nextParams, { replace: true });
+    });
   }
 
   async function handleDeleteSession(sessionId) {
@@ -97,23 +109,30 @@ export function ChatPage() {
   }
 
   async function handleSendMessage(message) {
-    if (!activeSessionId) {
+    if (!activeSessionId && !shouldShowDraft) {
       return;
     }
 
-    await sendMessageStream.sendMessage(activeSessionId, message);
+    await sendMessageStream.sendMessage({
+      message,
+      onSessionReady: (sessionId) => {
+        setIsDraftChat(false);
+        setActiveSession(sessionId);
+      },
+      sessionId: activeSessionId,
+    });
   }
 
   const sidebar = (
     <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between gap-3 rounded-[1.5rem] bg-slate-900 px-4 py-4 text-white">
+      <div className="flex items-start justify-between gap-3 rounded-[1.5rem] bg-slate-900 px-4 py-4 text-white dark:bg-slate-950">
         <div className="flex gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500 text-sm font-semibold">
             RAG
           </div>
           <div>
             <h2 className="text-base font-semibold">Knowledge Chat</h2>
-            <p className="text-xs text-slate-300">
+            <p className="text-xs text-slate-300 dark:text-slate-400">
               {user ? `Signed in as ${user.username}` : 'Authenticated workspace'}
             </p>
           </div>
@@ -131,10 +150,7 @@ export function ChatPage() {
       </div>
 
       <div className="mt-4">
-        <NewChatButton
-          disabled={createSessionMutation.isPending}
-          onClick={() => void handleCreateSession()}
-        />
+        <NewChatButton onClick={handleStartDraftChat} />
       </div>
 
       <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
@@ -157,19 +173,23 @@ export function ChatPage() {
         )}
       </div>
 
-      <div className="mt-4 border-t border-slate-200 pt-4">
-        <Button className="w-full" onClick={() => logout()} type="button" variant="ghost">
-          Log out
-        </Button>
+      <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+        <div className="flex flex-col gap-2">
+          <ThemeToggle className="w-full" />
+          <Button className="w-full" onClick={() => logout()} type="button" variant="ghost">
+            Log out
+          </Button>
+        </div>
       </div>
     </div>
   );
 
   const main = (
-    <div className="flex h-full min-h-[calc(100svh-1.5rem)] w-full min-w-0 flex-col">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <ChatHeader
         actions={
           <div className="flex items-center gap-2">
+            <ThemeToggle className="hidden md:inline-flex" />
             <Button
               className="lg:hidden"
               onClick={() => setIsSidebarOpen(true)}
@@ -180,7 +200,7 @@ export function ChatPage() {
               Sessions
             </Button>
             <Button
-              onClick={() => void handleCreateSession()}
+              onClick={handleStartDraftChat}
               size="sm"
               type="button"
               variant="secondary"
@@ -192,20 +212,22 @@ export function ChatPage() {
         subtitle={
           activeSession
             ? 'Messages persist automatically and new responses stream into the thread.'
-            : 'Create a new conversation or pick one from the sidebar to begin.'
+            : shouldShowDraft
+              ? 'Your first message will create the conversation and start streaming immediately.'
+              : 'Create a new conversation or pick one from the sidebar to begin.'
         }
         title={activeSession?.title?.trim() || 'New conversation'}
       />
 
       <div className="min-h-0 flex flex-1 flex-col">
-        {activeSessionId ? (
+        {activeSessionId || shouldShowDraft ? (
           <MessageList
             errorMessage={
-              messagesQuery.error
+              activeSessionId && messagesQuery.error
                 ? getApiErrorMessage(messagesQuery.error, 'Unable to load messages.')
                 : null
             }
-            isLoading={messagesQuery.isLoading}
+            isLoading={Boolean(activeSessionId) && messagesQuery.isLoading}
             messages={messages}
             onOpenSources={setSelectedMessage}
           />
@@ -214,7 +236,7 @@ export function ChatPage() {
             <div className="w-full max-w-2xl">
               <EmptyState
                 action={
-                  <Button onClick={() => void handleCreateSession()} type="button">
+                  <Button onClick={handleStartDraftChat} type="button">
                     Start a new chat
                   </Button>
                 }
@@ -227,9 +249,9 @@ export function ChatPage() {
       </div>
 
       <ChatInput
-        disabled={!activeSessionId}
+        disabled={!activeSessionId && !shouldShowDraft}
         errorMessage={sendMessageStream.streamError}
-        isSending={sendMessageStream.isSending}
+        isSending={sendMessageStream.isSending && sendMessageStream.sendingSessionId === optimisticKey}
         onSend={handleSendMessage}
       />
 

@@ -7,6 +7,8 @@ import { sendMessageStream } from '../api/chatApi';
 import { messagesQueryKey } from './useMessagesQuery';
 import { extractSourceContext, extractSourcesFromMetadata } from '../utils/sourceUtils';
 
+export const DRAFT_SESSION_KEY = 'draft';
+
 function patchSessionMessages(currentMap, sessionId, updater) {
   const nextMessages = updater(currentMap[sessionId] ?? []);
   const nextMap = { ...currentMap };
@@ -18,6 +20,23 @@ function patchSessionMessages(currentMap, sessionId, updater) {
   }
 
   return nextMap;
+}
+
+function moveSessionMessages(currentMap, fromSessionId, toSessionId) {
+  if (fromSessionId === toSessionId || !currentMap[fromSessionId]?.length) {
+    return currentMap;
+  }
+
+  const nextMap = { ...currentMap };
+  const existingTargetMessages = nextMap[toSessionId] ?? [];
+  nextMap[toSessionId] = [...existingTargetMessages, ...nextMap[fromSessionId]];
+  delete nextMap[fromSessionId];
+  return nextMap;
+}
+
+function readSessionId(value) {
+  const parsedValue = Number(value);
+  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null;
 }
 
 function parseSseEvents(buffer) {
@@ -48,22 +67,26 @@ export function useSendMessageStream() {
   const [sendingSessionId, setSendingSessionId] = useState(null);
   const [streamError, setStreamError] = useState(null);
 
-  async function sendMessage(sessionId, message) {
+  async function sendMessage({ message, onSessionReady, sessionId = null }) {
     const trimmedMessage = message.trim();
+    const sessionKey = sessionId ?? DRAFT_SESSION_KEY;
+
     if (!trimmedMessage || sendingSessionId !== null) {
       return;
     }
 
     setStreamError(null);
-    setSendingSessionId(sessionId);
+    setSendingSessionId(sessionKey);
 
     const timestamp = new Date().toISOString();
     const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const tempUserId = `temp-user-${uniqueId}`;
     const tempAssistantId = `temp-assistant-${uniqueId}`;
+    let resolvedSessionId = sessionId;
+    let optimisticSessionKey = sessionKey;
 
     setOptimisticMessages((currentMap) =>
-      patchSessionMessages(currentMap, sessionId, (messages) => [
+      patchSessionMessages(currentMap, sessionKey, (messages) => [
         ...messages,
         {
           content: trimmedMessage,
@@ -113,12 +136,17 @@ export function useSendMessageStream() {
         buffer = parsed.remaining;
 
         for (const event of parsed.events) {
+          const streamedSessionId = readSessionId(event.session_id);
+          if (!resolvedSessionId && streamedSessionId) {
+            resolvedSessionId = streamedSessionId;
+          }
+
           if (event.type === 'metadata') {
             const sources = extractSourcesFromMetadata(event);
             const sourceContext = extractSourceContext(event);
 
             setOptimisticMessages((currentMap) =>
-              patchSessionMessages(currentMap, sessionId, (messages) =>
+              patchSessionMessages(currentMap, optimisticSessionKey, (messages) =>
                 messages.map((existingMessage) =>
                   existingMessage.id === tempAssistantId
                     ? { ...existingMessage, sourceContext, sources }
@@ -130,7 +158,7 @@ export function useSendMessageStream() {
 
           if (event.type === 'token') {
             setOptimisticMessages((currentMap) =>
-              patchSessionMessages(currentMap, sessionId, (messages) =>
+              patchSessionMessages(currentMap, optimisticSessionKey, (messages) =>
                 messages.map((existingMessage) =>
                   existingMessage.id === tempAssistantId
                     ? {
@@ -145,27 +173,49 @@ export function useSendMessageStream() {
 
           if (event.type === 'done') {
             sawDone = true;
+            const doneSessionId = readSessionId(event.session_id);
+
+            if (!resolvedSessionId && doneSessionId) {
+              resolvedSessionId = doneSessionId;
+            }
+
+            if (optimisticSessionKey === DRAFT_SESSION_KEY && resolvedSessionId) {
+              setOptimisticMessages((currentMap) =>
+                moveSessionMessages(currentMap, DRAFT_SESSION_KEY, resolvedSessionId),
+              );
+              optimisticSessionKey = resolvedSessionId;
+            }
 
             setOptimisticMessages((currentMap) =>
-              patchSessionMessages(currentMap, sessionId, (messages) =>
+              patchSessionMessages(currentMap, optimisticSessionKey, (messages) =>
                 messages.map((existingMessage) =>
                   existingMessage.id === tempAssistantId
                     ? {
                         ...existingMessage,
                         content: event.content,
                         isStreaming: false,
+                        sourceContext:
+                          extractSourceContext(event) ?? existingMessage.sourceContext,
+                        sources:
+                          extractSourcesFromMetadata(event).length > 0
+                            ? extractSourcesFromMetadata(event)
+                            : existingMessage.sources,
                       }
                     : existingMessage,
                 ),
               ),
             );
 
-            if (event.title) {
+            if (event.title && resolvedSessionId) {
               queryClient.setQueryData(SESSIONS_QUERY_KEY, (currentSessions = []) =>
                 currentSessions.map((session) =>
-                  session.id === sessionId ? { ...session, title: event.title } : session,
+                  session.id === resolvedSessionId ? { ...session, title: event.title } : session,
                 ),
               );
+            }
+
+            if (resolvedSessionId) {
+              onSessionReady?.(resolvedSessionId);
             }
           }
 
@@ -191,14 +241,24 @@ export function useSendMessageStream() {
         throw new Error('The assistant response ended before completion.');
       }
 
+      const finalSessionId = resolvedSessionId ?? sessionId;
+      const messagesKey = finalSessionId ?? sessionKey;
+
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: messagesQueryKey(sessionId) }),
+        finalSessionId
+          ? queryClient.invalidateQueries({ queryKey: messagesQueryKey(finalSessionId) })
+          : Promise.resolve(),
         queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY }),
       ]);
-      await queryClient.refetchQueries({ queryKey: messagesQueryKey(sessionId), type: 'active' });
+      if (finalSessionId) {
+        await queryClient.refetchQueries({
+          queryKey: messagesQueryKey(finalSessionId),
+          type: 'active',
+        });
+      }
 
       setOptimisticMessages((currentMap) =>
-        patchSessionMessages(currentMap, sessionId, (messages) =>
+        patchSessionMessages(currentMap, messagesKey, (messages) =>
           messages.filter(
             (existingMessage) =>
               existingMessage.id !== tempAssistantId && existingMessage.id !== tempUserId,
@@ -210,13 +270,20 @@ export function useSendMessageStream() {
         error,
         'The response stream was interrupted. Please try again.',
       );
+      const currentMessagesKey = optimisticSessionKey;
 
       setStreamError(errorMessage);
-      await queryClient.invalidateQueries({ queryKey: messagesQueryKey(sessionId) });
-      await queryClient.refetchQueries({ queryKey: messagesQueryKey(sessionId), type: 'active' });
+      if (sessionId) {
+        await queryClient.invalidateQueries({ queryKey: messagesQueryKey(sessionId) });
+        await queryClient.refetchQueries({
+          queryKey: messagesQueryKey(sessionId),
+          type: 'active',
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
 
       setOptimisticMessages((currentMap) =>
-        patchSessionMessages(currentMap, sessionId, (messages) =>
+        patchSessionMessages(currentMap, currentMessagesKey, (messages) =>
           messages
             .filter((existingMessage) => existingMessage.id !== tempUserId)
             .map((existingMessage) =>

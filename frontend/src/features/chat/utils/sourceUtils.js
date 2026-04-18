@@ -29,19 +29,57 @@ function normalizeChunk(chunk, index) {
   };
 }
 
+export function normalizeSourceContext(value) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const topics = Array.isArray(value.topics)
+    ? value.topics.map(readString).filter(Boolean)
+    : [];
+
+  const retrievedChunkCount =
+    readNumber(value.retrievedChunkCount) ?? readNumber(value.retrieved_chunk_count);
+  const standaloneQuestion =
+    readString(value.standaloneQuestion) ?? readString(value.standalone_question);
+
+  if (!topics.length && !retrievedChunkCount && !standaloneQuestion) {
+    return null;
+  }
+
+  return {
+    retrievedChunkCount,
+    standaloneQuestion,
+    topics,
+  };
+}
+
+export function normalizeSources(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((chunk, index) => normalizeChunk(chunk, index)).filter(Boolean);
+}
+
 export function extractSourcesFromMetadata(event) {
   const rawChunks = Array.isArray(event.retrieved_chunks_final)
     ? event.retrieved_chunks_final
     : Array.isArray(event.chunks)
       ? event.chunks
-      : [];
+      : Array.isArray(event.sources)
+        ? event.sources
+        : [];
 
-  return rawChunks
-    .map((chunk, index) => normalizeChunk(chunk, index))
-    .filter(Boolean);
+  return normalizeSources(rawChunks);
 }
 
 export function extractSourceContext(event) {
+  const directSourceContext = normalizeSourceContext(event.source_context);
+  if (directSourceContext) {
+    return directSourceContext;
+  }
+
   const topics = [
     ...(event.structured_topics ?? []),
     ...(event.unique_topics_final ?? []),

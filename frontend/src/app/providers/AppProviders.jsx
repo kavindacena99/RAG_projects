@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { AuthProvider } from '../../features/auth/providers/AuthProvider';
+import { ThemeProvider } from '../../shared/providers/ThemeProvider';
 
 export function AppProviders({ children }) {
   const [queryClient] = useState(
@@ -23,7 +24,9 @@ export function AppProviders({ children }) {
   return (
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>{children}</AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
       </QueryClientProvider>
     </BrowserRouter>
   );

@@ -20,6 +20,7 @@ def build_streaming_response(
     output_mode: str = "standard",
     metadata: dict,
     on_complete,
+    on_error=None,
 ) -> StreamingHttpResponse:
     def event_stream():
         full_chunks = []
@@ -50,6 +51,8 @@ def build_streaming_response(
             )
         except Exception as exc:
             logger.exception("streaming response failed")
+            if on_error:
+                on_error(exc)
             yield _format_sse({"type": "error", "detail": str(exc)})
 
     response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")

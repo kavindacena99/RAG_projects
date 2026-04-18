@@ -31,8 +31,9 @@ class Message(models.Model):
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     content = models.TextField()
+    sources = models.JSONField(default=list, blank=True)
+    source_context = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["created_at", "id"]
-
