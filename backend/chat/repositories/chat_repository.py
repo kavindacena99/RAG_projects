@@ -21,8 +21,22 @@ class ChatRepository:
     def delete_session(self, session: ChatSession) -> None:
         session.delete()
 
-    def create_message(self, session: ChatSession, role: str, content: str) -> Message:
-        return Message.objects.create(session=session, role=role, content=content)
+    def create_message(
+        self,
+        session: ChatSession,
+        role: str,
+        content: str,
+        *,
+        source_context: dict | None = None,
+        sources: list[dict] | None = None,
+    ) -> Message:
+        return Message.objects.create(
+            session=session,
+            role=role,
+            content=content,
+            sources=sources or [],
+            source_context=source_context or {},
+        )
 
     def get_recent_messages(
         self,
@@ -56,4 +70,3 @@ class ChatRepository:
             .order_by("created_at", "id")
             .first()
         )
-

@@ -11,7 +11,10 @@ export function MessageList({ errorMessage, isLoading, messages, onOpenSources }
   const bottomRef = useRef(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    bottomRef.current?.scrollIntoView({
+      behavior: messages[messages.length - 1]?.isStreaming ? 'auto' : 'smooth',
+      block: 'end',
+    });
   }, [messages]);
 
   if (isLoading && messages.length === 0) {

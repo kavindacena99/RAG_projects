@@ -1,10 +1,12 @@
+import { normalizeSourceContext, normalizeSources } from './sourceUtils';
+
 export function mapChatMessageFromApi(message) {
   return {
     content: message.content,
     created_at: message.created_at,
     id: String(message.id),
     role: message.role,
-    sourceContext: null,
-    sources: [],
+    sourceContext: normalizeSourceContext(message.source_context),
+    sources: normalizeSources(message.sources),
   };
 }

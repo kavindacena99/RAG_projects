@@ -22,7 +22,7 @@ export function ChatInput({ disabled, errorMessage, isSending, onSend }) {
   }
 
   return (
-    <div className="border-t border-slate-200 bg-white/90 px-4 py-4 backdrop-blur md:px-6">
+    <div className="shrink-0 border-t border-slate-200 bg-white/90 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85 md:px-6">
       <form className="mx-auto max-w-4xl" onSubmit={handleSubmit}>
         <TextArea
           disabled={disabled || isSending}
@@ -43,7 +43,7 @@ export function ChatInput({ disabled, errorMessage, isSending, onSend }) {
         />
 
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-5 text-slate-400">
+          <p className="text-xs leading-5 text-slate-400 dark:text-slate-500">
             Press Enter to send. Shift + Enter adds a new line.
           </p>
           <Button
@@ -57,7 +57,7 @@ export function ChatInput({ disabled, errorMessage, isSending, onSend }) {
         </div>
 
         {errorMessage ? (
-          <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200">
             {errorMessage}
           </p>
         ) : null}

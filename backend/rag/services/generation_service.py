@@ -82,12 +82,16 @@ def build_generation_metadata(
     structured_context: dict | None = None,
     answer_plan: dict | None = None,
     retrieval_result: dict,
+    source_context: dict | None = None,
+    sources: list[dict] | None = None,
 ) -> dict:
     return {
         "session_id": session_id,
         "standalone_question": standalone_question,
         "history_count": len(history),
         "retrieved_chunk_count": len(chunks),
+        "retrieved_chunks_final": sources or [],
+        "source_context": source_context or {},
         "structured_mode": (structured_context or {}).get("mode"),
         "structured_topics": (structured_context or {}).get("structured_topics", []),
         "deduped_chunk_count": (structured_context or {}).get("deduped_chunk_count"),
